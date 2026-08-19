@@ -1,0 +1,19 @@
+venv/
+__pycache__/
+*.pyc
+
+# Spark / streaming checkpoints
+/tmp/
+checkpoint/
+checkpoints/
+**/checkpoint/
+**/checkpoints/
+
+# Python / local environment
+.env
+*.log
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/

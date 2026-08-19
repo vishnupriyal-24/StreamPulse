@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamPulse Dashboard</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 24px;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .card h3 {
+            margin: 0 0 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .card .value {
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f8f8f8;
+        }
+
+        .critical {
+            color: #c62828;
+            font-weight: bold;
+        }
+
+        .warning {
+            color: #ef6c00;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #c62828;
+        }
+
+        .ok {
+            color: #2e7d32;
+        }
+
+        #lastUpdated {
+            color: #777;
+            font-size: 13px;
+        }
+
+        @media (max-width: 900px) {
+            .summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .summary {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>StreamPulse</h1>
+    <div class="subtitle">
+        Real-time device monitoring and anomaly detection
+    </div>
+
+    <div class="summary">
+
+        <div class="card">
+            <h3>ACTIVE DEVICES</h3>
+            <div class="value" id="activeDevices">-</div>
+        </div>
+
+        <div class="card">
+            <h3>WARNING ALERTS</h3>
+            <div class="value warning" id="warningAlerts">-</div>
+        </div>
+
+        <div class="card">
+            <h3>CRITICAL ALERTS</h3>
+            <div class="value critical" id="criticalAlerts">-</div>
+        </div>
+
+        <div class="card">
+            <h3>TOTAL ALERTS</h3>
+            <div class="value" id="totalAlerts">-</div>
+        </div>
+
+    </div>
+
+    <div class="section">
+        <h2>Devices</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>CPU %</th>
+                    <th>Memory %</th>
+                    <th>Temperature °C</th>
+                    <th>Network Latency</th>
+                    <th>Error</th>
+                    <th>Last Seen</th>
+                </tr>
+            </thead>
+
+            <tbody id="devicesTable">
+                <tr>
+                    <td colspan="7">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Recent Alerts</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Device</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Reason</th>
+                    <th>CPU %</th>
+                    <th>Temperature</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+
+            <tbody id="alertsTable">
+                <tr>
+                    <td colspan="8">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="lastUpdated">
+        Last updated: -
+    </div>
+
+
+<script>
+
+const API = "http://localhost:8000";
+
+
+async function loadSummary() {
+
+    try {
+
+        const response = await fetch(`${API}/summary`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        document.getElementById("activeDevices").textContent =
+            data.active_devices ?? 0;
+
+        document.getElementById("warningAlerts").textContent =
+            data.recent_alerts_by_severity?.WARNING ?? 0;
+
+        document.getElementById("criticalAlerts").textContent =
+            data.recent_alerts_by_severity?.CRITICAL ?? 0;
+
+        document.getElementById("totalAlerts").textContent =
+            data.total_alerts_all_time ?? 0;
+
+        document.getElementById("lastUpdated").textContent =
+            "Last updated: " + new Date().toLocaleTimeString();
+
+    } catch (error) {
+
+        console.error("Summary error:", error);
+
+    }
+}
+
+
+async function loadDevices() {
+
+    try {
+
+        const response = await fetch(`${API}/devices`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const table = document.getElementById("devicesTable");
+
+        table.innerHTML = "";
+
+        if (!data.devices || data.devices.length === 0) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7">No devices found</td>
+                </tr>
+            `;
+
+            return;
+        }
+
+
+        data.devices.forEach(device => {
+
+            const row = document.createElement("tr");
+
+            const errorClass =
+                device.error_code ? "error" : "ok";
+
+            row.innerHTML = `
+                <td><strong>${device.device_id}</strong></td>
+
+                <td>${Number(device.cpu_usage).toFixed(2)}</td>
+
+                <td>${Number(device.memory_usage).toFixed(2)}</td>
+
+                <td>${Number(device.temperature).toFixed(2)}</td>
+
+                <td>${Number(device.network_latency).toFixed(2)}</td>
+
+                <td class="${errorClass}">
+                    ${device.error_code ?? "OK"}
+                </td>
+
+                <td>
+                    ${new Date(device.last_seen).toLocaleString()}
+                </td>
+            `;
+
+            table.appendChild(row);
+
+        });
+
+    } catch (error) {
+
+        console.error("Devices error:", error);
+
+        document.getElementById("devicesTable").innerHTML = `
+            <tr>
+                <td colspan="7">
+                    Failed to load devices
+                </td>
+            </tr>
+        `;
+
+    }
+}
+
+
+async function loadAlerts() {
+
+    try {
+
+        const response =
+            await fetch(`${API}/alerts?limit=10`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const table = document.getElementById("alertsTable");
+
+        table.innerHTML = "";
+
+        if (!data.alerts || data.alerts.length === 0) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="8">No alerts</td>
+                </tr>
+            `;
+
+            return;
+        }
+
+
+        data.alerts.forEach(alert => {
+
+            const row = document.createElement("tr");
+
+            const severityClass =
+                alert.severity === "CRITICAL"
+                    ? "critical"
+                    : alert.severity === "WARNING"
+                        ? "warning"
+                        : "";
+
+            row.innerHTML = `
+                <td>${alert.alert_id}</td>
+
+                <td>
+                    <strong>${alert.device_id}</strong>
+                </td>
+
+                <td>${alert.alert_type}</td>
+
+                <td class="${severityClass}">
+                    ${alert.severity}
+                </td>
+
+                <td>${alert.reason}</td>
+
+                <td>
+                    ${alert.cpu_usage != null
+                        ? Number(alert.cpu_usage).toFixed(2)
+                        : "-"}
+                </td>
+
+                <td>
+                    ${alert.temperature != null
+                        ? Number(alert.temperature).toFixed(2)
+                        : "-"}
+                </td>
+
+                <td>
+                    ${new Date(alert.event_time).toLocaleString()}
+                </td>
+            `;
+
+            table.appendChild(row);
+
+        });
+
+    } catch (error) {
+
+        console.error("Alerts error:", error);
+
+        document.getElementById("alertsTable").innerHTML = `
+            <tr>
+                <td colspan="8">
+                    Failed to load alerts
+                </td>
+            </tr>
+        `;
+
+    }
+}
+
+
+async function refreshDashboard() {
+
+    await Promise.all([
+        loadSummary(),
+        loadDevices(),
+        loadAlerts()
+    ]);
+
+}
+
+
+refreshDashboard();
+
+setInterval(refreshDashboard, 5000);
+
+</script>
+
+</body>
+</html>
