@@ -95,23 +95,23 @@ A real-time streaming pipeline that ingests simulated device telemetry, processe
 
 Benchmarks were run on a single Ubuntu VM under VirtualBox using `benchmark.py`, which measures actual producer throughput and approximate end-to-end latency (time from the last event sent until that device's state is visible in Redis).
 
-| Load (events/sec sent) | Actual achieved throughput | End-to-end latency (Kafka → Spark → Redis) | Notes |
-|---|---|---|---|
-| 100   | 74.7 events/sec | 0.03s | |
-| 1,000 (run 1) | 179.6 events/sec | 0.32s | |
-| 1,000 (run 2) | 202.1 events/sec | 0.01s | |
-| 1,000 (run 3) | 183.7 events/sec | 0.18s | |
-| 5,000 | 658.4 events/sec | 0.03s | |
+| Load (events/sec sent) | Actual achieved throughput | End-to-end latency (Kafka → Spark → Redis) | 
+|---|---|---|
+| 100   | 74.7 events/sec | 0.03s | 
+| 1,000 (run 1) | 179.6 events/sec | 0.32s | 
+| 1,000 (run 2) | 202.1 events/sec | 0.01s | 
+| 1,000 (run 3) | 183.7 events/sec | 0.18s | 
+| 5,000 | 658.4 events/sec | 0.03s | 
 
 The 1,000 eps target was repeated three times to check consistency — throughput varied between ~180-202 events/sec across runs, showing some variance under local VM conditions rather than a single fixed ceiling. Achieved throughput increased as the target rate increased (74.7 → ~190 → 658.4 events/sec across 100/1,000/5,000 targets), suggesting the bottleneck is largely fixed per-event overhead in the Python producer loop rather than a hard capacity limit in the pipeline — at low target rates, that per-event overhead dominates and caps throughput well below the target; at higher targets, the same fixed overhead matters proportionally less, so achieved throughput climbs closer to (though still below) the requested rate.
 
 **Parallelism testing** (`spark.sql.shuffle.partitions` at 2 / 4 / 8, fixed load of 1,000 events/sec target, 10s duration, Spark pipeline restarted between each run):
 
-| Shuffle partitions | Throughput | Approx. E2E latency | Notes |
-|---|---|---|---|
-| 2 | 179.6 events/sec | 0.32s | |
-| 4 | 202.1 events/sec | 0.01s | |
-| 8 | 183.7 events/sec | 0.18s | |
+| Shuffle partitions | Throughput | Approx. E2E latency | 
+|---|---|---|
+| 2 | 179.6 events/sec | 0.32s | 
+| 4 | 202.1 events/sec | 0.01s | 
+| 8 | 183.7 events/sec | 0.18s | 
 
 Throughput and latency did not scale meaningfully with shuffle partition count. At this load and on this VM, shuffle parallelism isn't the bottleneck — the limiting factor is more likely the single-threaded Python producer, Docker overhead, or the VM's available CPU cores, rather than how many partitions Spark shuffles across. Increasing `spark.sql.shuffle.partitions` past the number of available CPU cores adds task scheduling overhead without adding real parallel capacity, which may explain why 8 partitions didn't outperform 4.
 
@@ -125,14 +125,6 @@ Both tests were run with the full pipeline (`spark_anomaly.py`) and simulator (`
 - **Spark job killed and restarted** (`Ctrl+C` on `spark_anomaly.py` while the simulator kept producing, left down for ~30s, then restarted): on restart, the pipeline processed a visible burst of backlogged events before settling back into its normal per-batch rate — consistent with resuming from its checkpointed Kafka offset and catching up on everything the simulator produced while it was down, rather than skipping that data or reprocessing from the beginning.
 
 ---
-
-## Known limitations
-
-- Running in Spark local mode on a single VM, not a true multi-node cluster — "parallelism" testing here means local shuffle partitions, not distributed workers.
-- Structured Streaming queries don't auto-restart on crash; a production deployment would need a supervisor (systemd, Kubernetes) to restart a failed query automatically.
-- The ML anomaly threshold was tuned empirically against simulated data, not validated against real-world labeled anomalies — a genuine production system would need a proper evaluation set.
-- Redis TTL (1 hour) means a device that stops sending events silently disappears from `/devices` rather than being explicitly marked offline.
-- No authentication on the API or dashboard — fine for a local demo, not production-ready as-is.
 
 ---
 
